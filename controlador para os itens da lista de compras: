@@ -1,0 +1,304 @@
+/**
+ * src/controllers/itemController.js
+ * Controlador para gerenciar as operações relacionadas aos itens da lista de compras
+ */
+
+const { ItemListaModel } = require('../models/itemListaModel');
+const { ListaModel } = require('../models/listaModel');
+const { ProdutoModel } = require('../models/produtoModel');
+
+/**
+ * Controlador de Itens da Lista
+ */
+class ItemController {
+  /**
+   * Adiciona um item à lista de compras
+   * @param {Request} req - Requisição Express
+   * @param {Response} res - Resposta Express
+   */
+  static async adicionar(req, res) {
+    try {
+      const { lista_id, produto_id, quantidade, preco_unitario, observacao } = req.body;
+      
+      // Validação de dados
+      if (!lista_id || !produto_id) {
+        return res.status(400).json({ erro: 'Lista ID e Produto ID são obrigatórios' });
+      }
+      
+      // Obter ID do usuário da sessão
+      const usuario_id = req.session.usuario.id;
+      
+      // Verificar se a lista existe e pertence ao usuário
+      const lista = await ListaModel.buscarPorId(lista_id, usuario_id);
+      
+      if (!lista) {
+        return res.status(404).json({ erro: 'Lista de compras não encontrada' });
+      }
+      
+      // Verificar se o produto existe
+      const produto = await ProdutoModel.buscarPorId(produto_id);
+      
+      if (!produto) {
+        return res.status(404).json({ erro: 'Produto não encontrado' });
+      }
+      
+      // Adicionar o item à lista
+      const itemId = await ItemListaModel.adicionar({
+        lista_id,
+        produto_id,
+        quantidade: quantidade || 1,
+        preco_unitario: preco_unitario || produto.preco_medio,
+        observacao: observacao || ''
+      });
+      
+      // Buscar o item recém-adicionado com os detalhes do produto
+      const itens = await ItemListaModel.buscarPorLista(lista_id);
+      const item = itens.find(i => i.id === itemId);
+      
+      res.status(201).json({
+        item,
+        message: 'Item adicionado à lista com sucesso'
+      });
+    } catch (error) {
+      console.error('Erro ao adicionar item à lista:', error);
+      res.status(500).json({ erro: 'Erro ao adicionar item à lista' });
+    }
+  }
+
+  /**
+   * Lista todos os itens de uma lista de compras
+   * @param {Request} req - Requisição Express
+   * @param {Response} res - Resposta Express
+   */
+  static async listar(req, res) {
+    try {
+      const { lista_id } = req.params;
+      
+      // Obter ID do usuário da sessão
+      const usuario_id = req.session.usuario.id;
+      
+      // Verificar se a lista existe e pertence ao usuário
+      const lista = await ListaModel.buscarPorId(lista_id, usuario_id);
+      
+      if (!lista) {
+        return res.status(404).json({ erro: 'Lista de compras não encontrada' });
+      }
+      
+      // Buscar os itens da lista
+      const itens = await ItemListaModel.buscarPorLista(lista_id);
+      
+      // Agrupar os itens por categoria
+      const itensPorCategoria = {};
+      
+      itens.forEach(item => {
+        const categoriaNome = item.categoria_nome || 'Sem categoria';
+        
+        if (!itensPorCategoria[categoriaNome]) {
+          itensPorCategoria[categoriaNome] = {
+            nome: categoriaNome,
+            icone: item.categoria_icone || 'default',
+            itens: []
+          };
+        }
+        
+        itensPorCategoria[categoriaNome].itens.push(item);
+      });
+      
+      // Converter para array
+      const categorias = Object.values(itensPorCategoria);
+      
+      res.json({
+        categorias,
+        itens
+      });
+    } catch (error) {
+      console.error('Erro ao listar itens da lista:', error);
+      res.status(500).json({ erro: 'Erro ao listar itens da lista' });
+    }
+  }
+
+  /**
+   * Atualiza um item da lista de compras
+   * @param {Request} req - Requisição Express
+   * @param {Response} res - Resposta Express
+   */
+  static async atualizar(req, res) {
+    try {
+      const { id } = req.params;
+      const { lista_id, quantidade, preco_unitario, observacao } = req.body;
+      
+      // Validação de dados
+      if (!lista_id) {
+        return res.status(400).json({ erro: 'Lista ID é obrigatório' });
+      }
+      
+      // Obter ID do usuário da sessão
+      const usuario_id = req.session.usuario.id;
+      
+      // Verificar se a lista existe e pertence ao usuário
+      const lista = await ListaModel.buscarPorId(lista_id, usuario_id);
+      
+      if (!lista) {
+        return res.status(404).json({ erro: 'Lista de compras não encontrada' });
+      }
+      
+      // Atualizar o item
+      const dados = {};
+      
+      if (quantidade !== undefined) dados.quantidade = quantidade;
+      if (preco_unitario !== undefined) dados.preco_unitario = preco_unitario;
+      if (observacao !== undefined) dados.observacao = observacao;
+      
+      const atualizado = await ItemListaModel.atualizar(id, dados, lista_id);
+      
+      if (!atualizado) {
+        return res.status(404).json({ erro: 'Item não encontrado na lista' });
+      }
+      
+      // Buscar o item atualizado
+      const itens = await ItemListaModel.buscarPorLista(lista_id);
+      const item = itens.find(i => i.id === parseInt(id));
+      
+      res.json({
+        item,
+        message: 'Item atualizado com sucesso'
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar item da lista:', error);
+      res.status(500).json({ erro: 'Erro ao atualizar item da lista' });
+    }
+  }
+
+  /**
+   * Marca ou desmarca um item como comprado
+   * @param {Request} req - Requisição Express
+   * @param {Response} res - Resposta Express
+   */
+  static async marcarComprado(req, res) {
+    try {
+      const { id } = req.params;
+      const { lista_id, comprado } = req.body;
+      
+      // Validação de dados
+      if (!lista_id) {
+        return res.status(400).json({ erro: 'Lista ID é obrigatório' });
+      }
+      
+      // Obter ID do usuário da sessão
+      const usuario_id = req.session.usuario.id;
+      
+      // Verificar se a lista existe e pertence ao usuário
+      const lista = await ListaModel.buscarPorId(lista_id, usuario_id);
+      
+      if (!lista) {
+        return res.status(404).json({ erro: 'Lista de compras não encontrada' });
+      }
+      
+      // Marcar o item como comprado/não comprado
+      const atualizado = await ItemListaModel.marcarComprado(id, comprado, lista_id);
+      
+      if (!atualizado) {
+        return res.status(404).json({ erro: 'Item não encontrado na lista' });
+      }
+      
+      res.json({
+        id,
+        comprado,
+        message: `Item ${comprado ? 'marcado como comprado' : 'desmarcado'} com sucesso`
+      });
+    } catch (error) {
+      console.error('Erro ao marcar/desmarcar item como comprado:', error);
+      res.status(500).json({ erro: 'Erro ao marcar/desmarcar item como comprado' });
+    }
+  }
+
+  /**
+   * Remove um item da lista de compras
+   * @param {Request} req - Requisição Express
+   * @param {Response} res - Resposta Express
+   */
+  static async remover(req, res) {
+    try {
+      const { id } = req.params;
+      const { lista_id } = req.body;
+      
+      // Validação de dados
+      if (!lista_id) {
+        return res.status(400).json({ erro: 'Lista ID é obrigatório' });
+      }
+      
+      // Obter ID do usuário da sessão
+      const usuario_id = req.session.usuario.id;
+      
+      // Verificar se a lista existe e pertence ao usuário
+      const lista = await ListaModel.buscarPorId(lista_id, usuario_id);
+      
+      if (!lista) {
+        return res.status(404).json({ erro: 'Lista de compras não encontrada' });
+      }
+      
+      // Remover o item
+      const removido = await ItemListaModel.remover(id, lista_id);
+      
+      if (!removido) {
+        return res.status(404).json({ erro: 'Item não encontrado na lista' });
+      }
+      
+      res.json({
+        message: 'Item removido da lista com sucesso'
+      });
+    } catch (error) {
+      console.error('Erro ao remover item da lista:', error);
+      res.status(500).json({ erro: 'Erro ao remover item da lista' });
+    }
+  }
+
+  /**
+   * Atualiza a quantidade de um item da lista
+   * @param {Request} req - Requisição Express
+   * @param {Response} res - Resposta Express
+   */
+  static async atualizarQuantidade(req, res) {
+    try {
+      const { id } = req.params;
+      const { lista_id, quantidade } = req.body;
+      
+      // Validação de dados
+      if (!lista_id || quantidade === undefined) {
+        return res.status(400).json({ erro: 'Lista ID e quantidade são obrigatórios' });
+      }
+      
+      if (quantidade < 1) {
+        return res.status(400).json({ erro: 'A quantidade deve ser maior que zero' });
+      }
+      
+      // Obter ID do usuário da sessão
+      const usuario_id = req.session.usuario.id;
+      
+      // Verificar se a lista existe e pertence ao usuário
+      const lista = await ListaModel.buscarPorId(lista_id, usuario_id);
+      
+      if (!lista) {
+        return res.status(404).json({ erro: 'Lista de compras não encontrada' });
+      }
+      
+      // Atualizar a quantidade do item
+      const atualizado = await ItemListaModel.atualizar(id, { quantidade }, lista_id);
+      
+      if (!atualizado) {
+        return res.status(404).json({ erro: 'Item não encontrado na lista' });
+      }
+      
+      res.json({
+        id,
+        quantidade,
+        message: 'Quantidade atualizada com sucesso'
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar quantidade do item:', error);
+      res.status(500).json({ erro: 'Erro ao atualizar quantidade do item' });
+    }
+  }
+}
+
+module.exports = ItemController;
