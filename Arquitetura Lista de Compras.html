@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anotaí - Lista de Compras</title>
+    <style>
+        :root {
+            --primary-color: #4CAF50;
+            --secondary-color: #f8f8f8;
+            --text-color: #333;
+            --border-color: #ddd;
+            --shadow: 0 2px 5px rgba(0,0,0,0.1);
+            --delete-color: #f44336;
+            --check-color: #4CAF50;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 20px 0;
+            text-align: center;
+            border-radius: 8px 8px 0 0;
+            box-shadow: var(--shadow);
+        }
+
+        h1 {
+            margin-bottom: 10px;
+            font-size: 2rem;
+        }
+
+        .app-container {
+            background-color: white;
+            border-radius: 0 0 8px 8px;
+            box-shadow: var(--shadow);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            margin-bottom: 20px;
+        }
+
+        .input-group input {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px 0 0 4px;
+            font-size: 1rem;
+        }
+
+        .input-group button {
+            padding: 12px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 0 4px 4px 0;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-size: 1rem;
+        }
+
+        .input-group button:hover {
+            background-color: #45a049;
+        }
+
+        .lists-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .list {
+            flex: 1;
+            min-width: 300px;
+            background-color: var(--secondary-color);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 15px;
+        }
+
+        .list h2 {
+            margin-bottom: 15px;
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 5px;
+        }
+
+        .list ul {
+            list-style-type: none;
+        }
+
+        .list li {
+            background: white;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.3s;
+        }
+
+        .list li:hover {
+            background-color: #f9f9f9;
+        }
+
+        .list li .item-text {
+            display: flex;
+            align-items: center;
+            flex-grow: 1;
+        }
+
+        .list li .item-text span {
+            margin-left: 10px;
+            word-break: break-word;
+        }
+
+        .list li .actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: transform 0.2s;
+            color: var(--text-color);
+        }
+
+        .btn:hover {
+            transform: scale(1.2);
+        }
+
+        .btn-delete {
+            color: var(--delete-color);
+        }
+
+        .btn-check {
+            color: var(--check-color);
+        }
+
+        .completed {
+            text-decoration: line-through;
+            opacity: 0.7;
+        }
+
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: var(--secondary-color);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+        }
+
+        .summary h2 {
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+
+        .summary p {
+            margin: 5px 0;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .toolbar button {
+            padding: 8px 15px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .toolbar button:hover {
+            background-color: #45a049;
+        }
+
+        .categories-container {
+            margin-bottom: 20px;
+        }
+
+        .category-item {
+            display: inline-block;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            padding: 5px 10px;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 15px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .category-item.active {
+            background-color: #357a38;
+        }
+
+        @media (max-width: 768px) {
+            .lists-container {
+                flex-direction: column;
+            }
+            .list {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Anotaí - Lista de Compras</h1>
+            <p>Organize seus itens de forma simples e eficiente</p>
+        </header>
+
+        <div class="app-container">
+            <div class="input-group">
+                <input type="text" id="itemInput" placeholder="Digite um item...">
+                <button id="addItemBtn">Adicionar</button>
+            </div>
+
+            <div class="categories-container" id="categories">
+                <div class="category-item active" data-category="all">Todos</div>
+                <div class="category-item" data-category="Frutas">Frutas</div>
+                <div class="category-item" data-category="Legumes">Legumes</div>
+                <div class="category-item" data-category="Carnes">Carnes</div>
+                <div class="category-item" data-category="Laticínios">Laticínios</div>
+                <div class="category-item" data-category="Outros">Outros</div>
+            </div>
+
+            <div class="toolbar">
+                <button id="clearCompletedBtn">Limpar Concluídos</button>
+                <button id="clearAllBtn">Limpar Todos</button>
+            </div>
+
+            <div class="lists-container">
+                <div class="list">
+                    <h2>Itens a Comprar</h2>
+                    <ul id="todoList"></ul>
+                </div>
+                <div class="list">
+                    <h2>Itens Comprados</h2>
+                    <ul id="completedList"></ul>
+                </div>
+            </div>
+
+            <div class="summary">
+                <h2>Resumo</h2>
+                <p>Total de itens: <span id="totalItems">0</span></p>
+                <p>Itens a comprar: <span id="pendingItems">0</span></p>
+                <p>Itens comprados: <span id="completedItems">0</span></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Seletores de elementos
+            const itemInput = document.getElementById('itemInput');
+            const addItemBtn = document.getElementById('addItemBtn');
+            const todoList = document.getElementById('todoList');
+            const completedList = document.getElementById('completedList');
+            const totalItemsElement = document.getElementById('totalItems');
+            const pendingItemsElement = document.getElementById('pendingItems');
+            const completedItemsElement = document.getElementById('completedItems');
+            const clearCompletedBtn = document.getElementById('clearCompletedBtn');
+            const clearAllBtn = document.getElementById('clearAllBtn');
+            const categoriesContainer = document.getElementById('categories');
+
+            // Estado da aplicação
+            let shoppingItems = JSON.parse(localStorage.getItem('shoppingItems')) || [];
+            let activeCategory = 'all';
+
+            // Inicialização
+            renderLists();
+            updateSummary();
+
+            // Event Listeners
+            addItemBtn.addEventListener('click', addItem);
+            itemInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') addItem();
+            });
+
+            clearCompletedBtn.addEventListener('click', clearCompleted);
+            clearAllBtn.addEventListener('click', clearAll);
+
+            categoriesContainer.addEventListener('click', (e) => {
+                if (e.target.classList.contains('category-item')) {
+                    document.querySelectorAll('.category-item').forEach(item => {
+                        item.classList.remove('active');
+                    });
+                    e.target.classList.add('active');
+                    activeCategory = e.target.getAttribute('data-category');
+                    renderLists();
+                }
+            });
+
+            // Funções
+            function addItem() {
+                const text = itemInput.value.trim();
+                if (text) {
+                    const category = guessCategory(text);
+                    const newItem = {
+                        id: Date.now(),
+                        text,
+                        completed: false,
+                        category,
+                        createdAt: new Date()
+                    };
+
+                    shoppingItems.push(newItem);
+                    saveItems();
+                    renderLists();
+                    updateSummary();
+                    itemInput.value = '';
+                    itemInput.focus();
+                }
+            }
+
+            function guessCategory(text) {
+                text = text.toLowerCase();
+                
+                const categories = {
+                    'Frutas': ['maçã', 'banana', 'laranja', 'uva', 'pera', 'abacaxi', 'limão', 'manga', 'morango', 'melancia'],
+                    'Legumes': ['cenoura', 'batata', 'alface', 'tomate', 'cebola', 'alho', 'pepino', 'abobrinha', 'brócolis', 'couve'],
+                    'Carnes': ['frango', 'bife', 'carne', 'costela', 'linguiça', 'bacon', 'salsicha', 'presunto', 'peito', 'picanha'],
+                    'Laticínios': ['leite', 'queijo', 'manteiga', 'iogurte', 'requeijão', 'creme', 'nata', 'coalhada', 'ricota']
+                };
+
+                for (const [category, keywords] of Object.entries(categories)) {
+                    if (keywords.some(keyword => text.includes(keyword))) {
+                        return category;
+                    }
+                }
+
+                return 'Outros';
+            }
+
+            function toggleItem(id) {
+                shoppingItems = shoppingItems.map(item => {
+                    if (item.id === id) {
+                        return { ...item, completed: !item.completed };
+                    }
+                    return item;
+                });
+                
+                saveItems();
+                renderLists();
+                updateSummary();
+            }
+
+            function deleteItem(id) {
+                shoppingItems = shoppingItems.filter(item => item.id !== id);
+                saveItems();
+                renderLists();
+                updateSummary();
+            }
+
+            function clearCompleted() {
+                shoppingItems = shoppingItems.filter(item => !item.completed);
+                saveItems();
+                renderLists();
+                updateSummary();
+            }
+
+            function clearAll() {
+                if (confirm('Tem certeza que deseja remover todos os itens?')) {
+                    shoppingItems = [];
+                    saveItems();
+                    renderLists();
+                    updateSummary();
+                }
+            }
+
+            function saveItems() {
+                localStorage.setItem('shoppingItems', JSON.stringify(shoppingItems));
+            }
+
+            function renderLists() {
+                todoList.innerHTML = '';
+                completedList.innerHTML = '';
+
+                const filteredItems = activeCategory === 'all' 
+                    ? shoppingItems 
+                    : shoppingItems.filter(item => item.category === activeCategory);
+
+                filteredItems.forEach(item => {
+                    const listItem = document.createElement('li');
+                    listItem.innerHTML = `
+                        <div class="item-text ${item.completed ? 'completed' : ''}">
+                            <small>[${item.category}]</small>
+                            <span>${item.text}</span>
+                        </div>
+                        <div class="actions">
+                            <button class="btn btn-check" onclick="toggleItem(${item.id})">
+                                ${item.completed ? '↩️' : '✅'}
+                            </button>
+                            <button class="btn btn-delete" onclick="deleteItem(${item.id})">🗑️</button>
+                        </div>
+                    `;
+
+                    if (item.completed) {
+                        completedList.appendChild(listItem);
+                    } else {
+                        todoList.appendChild(listItem);
+                    }
+                });
+
+                // Adicionar as funções ao escopo global para funcionarem nos eventos inline
+                window.toggleItem = toggleItem;
+                window.deleteItem = deleteItem;
+            }
+
+            function updateSummary() {
+                const total = shoppingItems.length;
+                const pending = shoppingItems.filter(item => !item.completed).length;
+                const completed = shoppingItems.filter(item => item.completed).length;
+
+                totalItemsElement.textContent = total;
+                pendingItemsElement.textContent = pending;
+                completedItemsElement.textContent = completed;
+            }
+        });
+    </script>
+</body>
+</html>
