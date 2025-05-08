@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anotaí - Lista de Compras</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Anotaí - Lista de Compras</h1>
+            <p>Organize seus itens de forma simples e eficiente</p>
+        </header>
+
+        <div class="app-container">
+            <div class="input-group">
+                <input type="text" id="itemInput" placeholder="Digite um item...">
+                <button id="addItemBtn">Adicionar</button>
+            </div>
+
+            <div class="categories-container" id="categories">
+                <div class="category-item active" data-category="all">Todos</div>
+                <div class="category-item" data-category="Frutas">Frutas</div>
+                <div class="category-item" data-category="Legumes">Legumes</div>
+                <div class="category-item" data-category="Carnes">Carnes</div>
+                <div class="category-item" data-category="Laticínios">Laticínios</div>
+                <div class="category-item" data-category="Outros">Outros</div>
+            </div>
+
+            <div class="toolbar">
+                <button id="clearCompletedBtn">Limpar Concluídos</button>
+                <button id="clearAllBtn">Limpar Todos</button>
+            </div>
+
+            <div class="lists-container">
+                <div class="list">
+                    <h2>Itens a Comprar</h2>
+                    <ul id="todoList"></ul>
+                </div>
+                <div class="list">
+                    <h2>Itens Comprados</h2>
+                    <ul id="completedList"></ul>
+                </div>
+            </div>
+
+            <div class="summary">
+                <h2>Resumo</h2>
+                <p>Total de itens: <span id="totalItems">0</span></p>
+                <p>Itens a comprar: <span id="pendingItems">0</span></p>
+                <p>Itens comprados: <span id="completedItems">0</span></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
