@@ -1,0 +1,93 @@
+/**
+ * src/routes/listaRoutes.js
+ * Rotas para gerenciamento de listas de compras
+ */
+
+const express = require('express');
+const router = express.Router();
+const ListaController = require('../controllers/listaController');
+const authMiddleware = require('../middleware/auth');
+
+// Aplicar middleware de autenticação em todas as rotas
+router.use(authMiddleware);
+
+// Rotas de listas de compras
+router.post('/', ListaController.criar);
+router.get('/', ListaController.listar);
+router.get('/:id', ListaController.obterDetalhes);
+router.put('/:id', ListaController.atualizar);
+router.delete('/:id', ListaController.excluir);
+router.post('/:id/limpar-comprados', ListaController.limparComprados);
+router.post('/:id/compartilhar', ListaController.compartilhar);
+
+module.exports = router;
+
+/**
+ * src/routes/itemRoutes.js
+ * Rotas para gerenciamento de itens das listas de compras
+ */
+
+const express = require('express');
+const router = express.Router();
+const ItemController = require('../controllers/itemController');
+const authMiddleware = require('../middleware/auth');
+
+// Aplicar middleware de autenticação em todas as rotas
+router.use(authMiddleware);
+
+// Rotas de itens da lista
+router.post('/', ItemController.adicionar);
+router.get('/lista/:lista_id', ItemController.listar);
+router.put('/:id', ItemController.atualizar);
+router.put('/:id/comprado', ItemController.marcarComprado);
+router.put('/:id/quantidade', ItemController.atualizarQuantidade);
+router.delete('/:id', ItemController.remover);
+
+module.exports = router;
+
+/**
+ * src/routes/produtoRoutes.js
+ * Rotas para gerenciamento de produtos
+ */
+
+const express = require('express');
+const router = express.Router();
+const ProdutoController = require('../controllers/produtoController');
+const authMiddleware = require('../middleware/auth');
+
+// Aplicar middleware de autenticação em todas as rotas
+router.use(authMiddleware);
+
+// Rotas de produtos
+router.get('/', ProdutoController.listar);
+router.get('/:id', ProdutoController.obterPorId);
+router.post('/', ProdutoController.criar);
+router.put('/:id', ProdutoController.atualizar);
+
+// Rotas de categorias
+router.get('/categorias', ProdutoController.listarCategorias);
+
+module.exports = router;
+
+/**
+ * src/routes/usuarioRoutes.js
+ * Rotas para gerenciamento de usuários
+ */
+
+const express = require('express');
+const router = express.Router();
+const UsuarioController = require('../controllers/usuarioController');
+const authMiddleware = require('../middleware/auth');
+
+// Rotas públicas (sem autenticação)
+router.post('/registro', UsuarioController.registrar);
+router.post('/login', UsuarioController.login);
+router.post('/logout', UsuarioController.logout);
+
+// Rotas protegidas (com autenticação)
+router.use('/perfil', authMiddleware);
+router.get('/perfil', UsuarioController.obterPerfil);
+router.put('/perfil', UsuarioController.atualizarPerfil);
+router.put('/perfil/senha', UsuarioController.alterarSenha);
+
+module.exports = router;
