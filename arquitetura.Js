@@ -1,4 +1,18 @@
+```javascript
 document.addEventListener('DOMContentLoaded', () => {
+    // Dados do usuário (simulando dados que viriam da API)
+    const userData = {
+        nome: "Arthur Bertoni",
+        email: "arthur@exemplo.com"
+    };
+
+    // Atualiza dados do usuário na interface
+    document.getElementById('userName').textContent = userData.nome;
+    
+    // Define as iniciais do usuário para o ícone
+    const iniciais = userData.nome.split(' ').map(n => n[0]).join('');
+    document.getElementById('userInitials').textContent = iniciais;
+
     // Seletores de elementos
     const itemInput = document.getElementById('itemInput');
     const addItemBtn = document.getElementById('addItemBtn');
@@ -37,6 +51,15 @@ document.addEventListener('DOMContentLoaded', () => {
             activeCategory = e.target.getAttribute('data-category');
             renderLists();
         }
+    });
+
+    document.getElementById('userArea').addEventListener('click', () => {
+        alert('Funcionalidade de perfil será implementada em breve!');
+    });
+
+    document.querySelector('.back-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        alert('Redirecionamento para a página principal será implementado em breve!');
     });
 
     // Funções
@@ -148,12 +171,12 @@ document.addEventListener('DOMContentLoaded', () => {
             actionsDiv.className = 'actions';
             
             const checkButton = document.createElement('button');
-            checkButton.className = 'btn btn-check';
+            checkButton.className = 'btn-icon btn-check';
             checkButton.textContent = item.completed ? '↩️' : '✅';
             checkButton.addEventListener('click', () => toggleItem(item.id));
             
             const deleteButton = document.createElement('button');
-            deleteButton.className = 'btn btn-delete';
+            deleteButton.className = 'btn-icon btn-delete';
             deleteButton.textContent = '🗑️';
             deleteButton.addEventListener('click', () => deleteItem(item.id));
             
@@ -181,3 +204,4 @@ document.addEventListener('DOMContentLoaded', () => {
         completedItemsElement.textContent = completed;
     }
 });
+```
