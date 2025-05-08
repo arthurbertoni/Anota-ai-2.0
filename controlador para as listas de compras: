@@ -1,0 +1,273 @@
+/**
+ * src/controllers/listaController.js
+ * Controlador para gerenciar as operações relacionadas às listas de compras
+ */
+
+const { ListaModel } = require('../models/listaModel');
+const { ItemListaModel } = require('../models/itemListaModel');
+
+/**
+ * Controlador de Listas de Compras
+ */
+class ListaController {
+  /**
+   * Cria uma nova lista de compras
+   * @param {Request} req - Requisição Express
+   * @param {Response} res - Resposta Express
+   */
+  static async criar(req, res) {
+    try {
+      const { nome, descricao } = req.body;
+      
+      // Validação de dados
+      if (!nome) {
+        return res.status(400).json({ erro: 'O nome da lista é obrigatório' });
+      }
+      
+      // Obter ID do usuário da sessão
+      const usuario_id = req.session.usuario.id;
+      
+      // Criar a lista
+      const listaId = await ListaModel.criar({
+        usuario_id,
+        nome,
+        descricao: descricao || ''
+      });
+      
+      res.status(201).json({
+        id: listaId,
+        nome,
+        descricao,
+        message: 'Lista de compras criada com sucesso'
+      });
+    } catch (error) {
+      console.error('Erro ao criar lista de compras:', error);
+      res.status(500).json({ erro: 'Erro ao criar lista de compras' });
+    }
+  }
+
+  /**
+   * Lista todas as listas de compras do usuário
+   * @param {Request} req - Requisição Express
+   * @param {Response} res - Resposta Express
+   */
+  static async listar(req, res) {
+    try {
+      // Obter ID do usuário da sessão
+      const usuario_id = req.session.usuario.id;
+      
+      // Buscar as listas do usuário
+      const listas = await ListaModel.buscarPorUsuario(usuario_id);
+      
+      // Para cada lista, adicionar estatísticas
+      const listasComEstatisticas = await Promise.all(listas.map(async (lista) => {
+        const estatisticas = await ItemListaModel.obterEstatisticas(lista.id);
+        return {
+          ...lista,
+          estatisticas
+        };
+      }));
+      
+      res.json(listasComEstatisticas);
+    } catch (error) {
+      console.error('Erro ao listar listas de compras:', error);
+      res.status(500).json({ erro: 'Erro ao listar listas de compras' });
+    }
+  }
+
+  /**
+   * Obtém detalhes de uma lista de compras específica
+   * @param {Request} req - Requisição Express
+   * @param {Response} res - Resposta Express
+   */
+  static async obterDetalhes(req, res) {
+    try {
+      const { id } = req.params;
+      
+      // Obter ID do usuário da sessão
+      const usuario_id = req.session.usuario.id;
+      
+      // Buscar a lista
+      const lista = await ListaModel.buscarPorId(id, usuario_id);
+      
+      if (!lista) {
+        return res.status(404).json({ erro: 'Lista de compras não encontrada' });
+      }
+      
+      // Buscar os itens da lista
+      const itens = await ItemListaModel.buscarPorLista(id);
+      
+      // Obter estatísticas da lista
+      const estatisticas = await ItemListaModel.obterEstatisticas(id);
+      
+      res.json({
+        lista,
+        itens,
+        estatisticas
+      });
+    } catch (error) {
+      console.error('Erro ao obter detalhes da lista de compras:', error);
+      res.status(500).json({ erro: 'Erro ao obter detalhes da lista de compras' });
+    }
+  }
+
+  /**
+   * Atualiza uma lista de compras
+   * @param {Request} req - Requisição Express
+   * @param {Response} res - Resposta Express
+   */
+  static async atualizar(req, res) {
+    try {
+      const { id } = req.params;
+      const { nome, descricao } = req.body;
+      
+      // Validação de dados
+      if (!nome) {
+        return res.status(400).json({ erro: 'O nome da lista é obrigatório' });
+      }
+      
+      // Obter ID do usuário da sessão
+      const usuario_id = req.session.usuario.id;
+      
+      // Verificar se a lista existe
+      const lista = await ListaModel.buscarPorId(id, usuario_id);
+      
+      if (!lista) {
+        return res.status(404).json({ erro: 'Lista de compras não encontrada' });
+      }
+      
+      // Atualizar a lista
+      const atualizado = await ListaModel.atualizar(id, {
+        nome,
+        descricao
+      }, usuario_id);
+      
+      if (!atualizado) {
+        return res.status(400).json({ erro: 'Não foi possível atualizar a lista de compras' });
+      }
+      
+      res.json({
+        id,
+        nome,
+        descricao,
+        message: 'Lista de compras atualizada com sucesso'
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar lista de compras:', error);
+      res.status(500).json({ erro: 'Erro ao atualizar lista de compras' });
+    }
+  }
+
+  /**
+   * Exclui uma lista de compras
+   * @param {Request} req - Requisição Express
+   * @param {Response} res - Resposta Express
+   */
+  static async excluir(req, res) {
+    try {
+      const { id } = req.params;
+      
+      // Obter ID do usuário da sessão
+      const usuario_id = req.session.usuario.id;
+      
+      // Verificar se a lista existe
+      const lista = await ListaModel.buscarPorId(id, usuario_id);
+      
+      if (!lista) {
+        return res.status(404).json({ erro: 'Lista de compras não encontrada' });
+      }
+      
+      // Excluir a lista
+      const excluido = await ListaModel.excluir(id, usuario_id);
+      
+      if (!excluido) {
+        return res.status(400).json({ erro: 'Não foi possível excluir a lista de compras' });
+      }
+      
+      res.json({
+        message: 'Lista de compras excluída com sucesso'
+      });
+    } catch (error) {
+      console.error('Erro ao excluir lista de compras:', error);
+      res.status(500).json({ erro: 'Erro ao excluir lista de compras' });
+    }
+  }
+
+  /**
+   * Limpa todos os itens marcados como comprados de uma lista
+   * @param {Request} req - Requisição Express
+   * @param {Response} res - Resposta Express
+   */
+  static async limparComprados(req, res) {
+    try {
+      const { id } = req.params;
+      
+      // Obter ID do usuário da sessão
+      const usuario_id = req.session.usuario.id;
+      
+      // Verificar se a lista existe
+      const lista = await ListaModel.buscarPorId(id, usuario_id);
+      
+      if (!lista) {
+        return res.status(404).json({ erro: 'Lista de compras não encontrada' });
+      }
+      
+      // Buscar os itens da lista que estão marcados como comprados
+      const itens = await ItemListaModel.buscarPorLista(id);
+      const itensComprados = itens.filter(item => item.comprado);
+      
+      // Remover os itens comprados
+      for (const item of itensComprados) {
+        await ItemListaModel.remover(item.id, id);
+      }
+      
+      res.json({
+        message: `${itensComprados.length} itens comprados foram removidos da lista`
+      });
+    } catch (error) {
+      console.error('Erro ao limpar itens comprados:', error);
+      res.status(500).json({ erro: 'Erro ao limpar itens comprados da lista' });
+    }
+  }
+
+  /**
+   * Compartilha uma lista de compras gerando um link único
+   * @param {Request} req - Requisição Express
+   * @param {Response} res - Resposta Express
+   */
+  static async compartilhar(req, res) {
+    try {
+      const { id } = req.params;
+      
+      // Obter ID do usuário da sessão
+      const usuario_id = req.session.usuario.id;
+      
+      // Verificar se a lista existe
+      const lista = await ListaModel.buscarPorId(id, usuario_id);
+      
+      if (!lista) {
+        return res.status(404).json({ erro: 'Lista de compras não encontrada' });
+      }
+      
+      // Gerar um código único para compartilhamento (simplificado)
+      const codigoCompartilhamento = Buffer.from(`${id}-${Date.now()}`).toString('base64').substring(0, 12);
+      
+      // Atualizar a lista com o código de compartilhamento
+      await ListaModel.atualizar(id, {
+        codigo_compartilhamento: codigoCompartilhamento
+      }, usuario_id);
+      
+      const urlCompartilhamento = `${req.protocol}://${req.get('host')}/compartilhado/${codigoCompartilhamento}`;
+      
+      res.json({
+        url: urlCompartilhamento,
+        message: 'Link de compartilhamento gerado com sucesso'
+      });
+    } catch (error) {
+      console.error('Erro ao compartilhar lista de compras:', error);
+      res.status(500).json({ erro: 'Erro ao compartilhar lista de compras' });
+    }
+  }
+}
+
+module.exports = ListaController;
