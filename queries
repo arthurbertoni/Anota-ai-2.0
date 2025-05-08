@@ -1,0 +1,566 @@
+const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcrypt');
+const path = require('path');
+
+// Configuração do banco de dados
+const db = new sqlite3.Database(path.join(__dirname, 'database', 'lista_compras.db'));
+
+// Classe para gerenciar o banco de dados
+class Database {
+  /**
+   * Inicializa o banco de dados
+   */
+  static inicializar() {
+    return new Promise((resolve, reject) => {
+      db.serialize(() => {
+        // Leitura do arquivo schema.sql
+        const fs = require('fs');
+        const schema = fs.readFileSync(path.join(__dirname, 'database', 'schema.sql'), 'utf8');
+        
+        // Executa o script SQL
+        db.exec(schema, (err) => {
+          if (err) return reject(err);
+          console.log('Banco de dados inicializado com sucesso.');
+          resolve();
+        });
+      });
+    });
+  }
+
+  /**
+   * Fecha a conexão com o banco de dados
+   */
+  static fechar() {
+    return new Promise((resolve, reject) => {
+      db.close((err) => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+  }
+}
+
+// Classe para operações de usuários
+class UsuarioModel {
+  /**
+   * Cria um novo usuário
+   * @param {Object} usuario - Dados do usuário
+   * @returns {Promise<number>} - ID do usuário criado
+   */
+  static async criar(usuario) {
+    const { nome, email, senha } = usuario;
+    
+    // Hash da senha
+    const hashSenha = await bcrypt.hash(senha, 10);
+    
+    return new Promise((resolve, reject) => {
+      const query = `
+        INSERT INTO usuarios (nome, email, senha)
+        VALUES (?, ?, ?)
+      `;
+      
+      db.run(query, [nome, email, hashSenha], function(err) {
+        if (err) return reject(err);
+        resolve(this.lastID);
+      });
+    });
+  }
+
+  /**
+   * Busca um usuário pelo email
+   * @param {string} email - Email do usuário
+   * @returns {Promise<Object|null>} - Dados do usuário
+   */
+  static buscarPorEmail(email) {
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT id, nome, email, senha
+        FROM usuarios
+        WHERE email = ?
+      `;
+      
+      db.get(query, [email], (err, row) => {
+        if (err) return reject(err);
+        resolve(row || null);
+      });
+    });
+  }
+
+  /**
+   * Autentica um usuário
+   * @param {string} email - Email do usuário
+   * @param {string} senha - Senha do usuário
+   * @returns {Promise<Object|null>} - Dados do usuário autenticado
+   */
+  static async autenticar(email, senha) {
+    const usuario = await this.buscarPorEmail(email);
+    
+    if (!usuario) return null;
+    
+    const senhaCorreta = await bcrypt.compare(senha, usuario.senha);
+    
+    if (!senhaCorreta) return null;
+    
+    // Não retornar a senha
+    delete usuario.senha;
+    
+    return usuario;
+  }
+
+  /**
+   * Atualiza um usuário
+   * @param {number} id - ID do usuário
+   * @param {Object} dados - Novos dados do usuário
+   * @returns {Promise<boolean>} - Sucesso da operação
+   */
+  static atualizar(id, dados) {
+    return new Promise(async (resolve, reject) => {
+      const campos = [];
+      const valores = [];
+      
+      for (const [chave, valor] of Object.entries(dados)) {
+        if (chave === 'senha') {
+          campos.push(`${chave} = ?`);
+          valores.push(await bcrypt.hash(valor, 10));
+        } else if (chave !== 'id' && chave !== 'data_criacao') {
+          campos.push(`${chave} = ?`);
+          valores.push(valor);
+        }
+      }
+      
+      campos.push('data_atualizacao = CURRENT_TIMESTAMP');
+      
+      const query = `
+        UPDATE usuarios
+        SET ${campos.join(', ')}
+        WHERE id = ?
+      `;
+      
+      valores.push(id);
+      
+      db.run(query, valores, function(err) {
+        if (err) return reject(err);
+        resolve(this.changes > 0);
+      });
+    });
+  }
+}
+
+// Classe para operações de listas de compras
+class ListaModel {
+  /**
+   * Cria uma nova lista de compras
+   * @param {Object} lista - Dados da lista
+   * @returns {Promise<number>} - ID da lista criada
+   */
+  static criar(lista) {
+    return new Promise((resolve, reject) => {
+      const { usuario_id, nome, descricao } = lista;
+      
+      const query = `
+        INSERT INTO listas (usuario_id, nome, descricao)
+        VALUES (?, ?, ?)
+      `;
+      
+      db.run(query, [usuario_id, nome, descricao], function(err) {
+        if (err) return reject(err);
+        resolve(this.lastID);
+      });
+    });
+  }
+
+  /**
+   * Busca todas as listas de um usuário
+   * @param {number} usuario_id - ID do usuário
+   * @returns {Promise<Array>} - Lista de compras do usuário
+   */
+  static buscarPorUsuario(usuario_id) {
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT id, nome, descricao, data_criacao, data_atualizacao
+        FROM listas
+        WHERE usuario_id = ?
+        ORDER BY data_atualizacao DESC
+      `;
+      
+      db.all(query, [usuario_id], (err, rows) => {
+        if (err) return reject(err);
+        resolve(rows || []);
+      });
+    });
+  }
+
+  /**
+   * Busca uma lista pelo ID
+   * @param {number} id - ID da lista
+   * @param {number} usuario_id - ID do usuário (para segurança)
+   * @returns {Promise<Object|null>} - Dados da lista
+   */
+  static buscarPorId(id, usuario_id) {
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT id, usuario_id, nome, descricao, data_criacao, data_atualizacao
+        FROM listas
+        WHERE id = ? AND usuario_id = ?
+      `;
+      
+      db.get(query, [id, usuario_id], (err, row) => {
+        if (err) return reject(err);
+        resolve(row || null);
+      });
+    });
+  }
+
+  /**
+   * Atualiza uma lista de compras
+   * @param {number} id - ID da lista
+   * @param {Object} dados - Novos dados da lista
+   * @param {number} usuario_id - ID do usuário (para segurança)
+   * @returns {Promise<boolean>} - Sucesso da operação
+   */
+  static atualizar(id, dados, usuario_id) {
+    return new Promise((resolve, reject) => {
+      const campos = [];
+      const valores = [];
+      
+      for (const [chave, valor] of Object.entries(dados)) {
+        if (chave !== 'id' && chave !== 'usuario_id' && chave !== 'data_criacao') {
+          campos.push(`${chave} = ?`);
+          valores.push(valor);
+        }
+      }
+      
+      campos.push('data_atualizacao = CURRENT_TIMESTAMP');
+      
+      const query = `
+        UPDATE listas
+        SET ${campos.join(', ')}
+        WHERE id = ? AND usuario_id = ?
+      `;
+      
+      valores.push(id, usuario_id);
+      
+      db.run(query, valores, function(err) {
+        if (err) return reject(err);
+        resolve(this.changes > 0);
+      });
+    });
+  }
+
+  /**
+   * Exclui uma lista de compras
+   * @param {number} id - ID da lista
+   * @param {number} usuario_id - ID do usuário (para segurança)
+   * @returns {Promise<boolean>} - Sucesso da operação
+   */
+  static excluir(id, usuario_id) {
+    return new Promise((resolve, reject) => {
+      const query = `
+        DELETE FROM listas
+        WHERE id = ? AND usuario_id = ?
+      `;
+      
+      db.run(query, [id, usuario_id], function(err) {
+        if (err) return reject(err);
+        resolve(this.changes > 0);
+      });
+    });
+  }
+}
+
+// Classe para operações de produtos
+class ProdutoModel {
+  /**
+   * Busca todos os produtos
+   * @param {string} termo - Termo de pesquisa (opcional)
+   * @returns {Promise<Array>} - Lista de produtos
+   */
+  static buscarTodos(termo = '') {
+    return new Promise((resolve, reject) => {
+      let query = `
+        SELECT p.id, p.nome, p.preco_medio, p.imagem_url, 
+               c.id as categoria_id, c.nome as categoria_nome, c.icone as categoria_icone
+        FROM produtos p
+        LEFT JOIN categorias c ON p.categoria_id = c.id
+      `;
+      
+      const params = [];
+      
+      if (termo) {
+        query += ` WHERE p.nome LIKE ?`;
+        params.push(`%${termo}%`);
+      }
+      
+      query += ` ORDER BY p.nome`;
+      
+      db.all(query, params, (err, rows) => {
+        if (err) return reject(err);
+        resolve(rows || []);
+      });
+    });
+  }
+
+  /**
+   * Busca um produto pelo ID
+   * @param {number} id - ID do produto
+   * @returns {Promise<Object|null>} - Dados do produto
+   */
+  static buscarPorId(id) {
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT p.id, p.nome, p.preco_medio, p.imagem_url, 
+               c.id as categoria_id, c.nome as categoria_nome, c.icone as categoria_icone
+        FROM produtos p
+        LEFT JOIN categorias c ON p.categoria_id = c.id
+        WHERE p.id = ?
+      `;
+      
+      db.get(query, [id], (err, row) => {
+        if (err) return reject(err);
+        resolve(row || null);
+      });
+    });
+  }
+
+  /**
+   * Cria um novo produto
+   * @param {Object} produto - Dados do produto
+   * @returns {Promise<number>} - ID do produto criado
+   */
+  static criar(produto) {
+    return new Promise((resolve, reject) => {
+      const { nome, categoria_id, preco_medio, imagem_url } = produto;
+      
+      const query = `
+        INSERT INTO produtos (nome, categoria_id, preco_medio, imagem_url)
+        VALUES (?, ?, ?, ?)
+      `;
+      
+      db.run(query, [nome, categoria_id, preco_medio, imagem_url], function(err) {
+        if (err) return reject(err);
+        resolve(this.lastID);
+      });
+    });
+  }
+
+  /**
+   * Atualiza um produto
+   * @param {number} id - ID do produto
+   * @param {Object} dados - Novos dados do produto
+   * @returns {Promise<boolean>} - Sucesso da operação
+   */
+  static atualizar(id, dados) {
+    return new Promise((resolve, reject) => {
+      const campos = [];
+      const valores = [];
+      
+      for (const [chave, valor] of Object.entries(dados)) {
+        if (chave !== 'id') {
+          campos.push(`${chave} = ?`);
+          valores.push(valor);
+        }
+      }
+      
+      const query = `
+        UPDATE produtos
+        SET ${campos.join(', ')}
+        WHERE id = ?
+      `;
+      
+      valores.push(id);
+      
+      db.run(query, valores, function(err) {
+        if (err) return reject(err);
+        resolve(this.changes > 0);
+      });
+    });
+  }
+}
+
+// Classe para operações de categorias
+class CategoriaModel {
+  /**
+   * Busca todas as categorias
+   * @returns {Promise<Array>} - Lista de categorias
+   */
+  static buscarTodas() {
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT id, nome, icone
+        FROM categorias
+        ORDER BY nome
+      `;
+      
+      db.all(query, [], (err, rows) => {
+        if (err) return reject(err);
+        resolve(rows || []);
+      });
+    });
+  }
+}
+
+// Classe para operações de itens da lista
+class ItemListaModel {
+  /**
+   * Adiciona um item à lista de compras
+   * @param {Object} item - Dados do item
+   * @returns {Promise<number>} - ID do item adicionado
+   */
+  static adicionar(item) {
+    return new Promise((resolve, reject) => {
+      const { lista_id, produto_id, quantidade, preco_unitario, observacao } = item;
+      
+      const query = `
+        INSERT INTO itens_lista (lista_id, produto_id, quantidade, preco_unitario, observacao)
+        VALUES (?, ?, ?, ?, ?)
+      `;
+      
+      db.run(query, [lista_id, produto_id, quantidade, preco_unitario, observacao], function(err) {
+        if (err) return reject(err);
+        resolve(this.lastID);
+      });
+    });
+  }
+
+  /**
+   * Busca todos os itens de uma lista
+   * @param {number} lista_id - ID da lista
+   * @returns {Promise<Array>} - Itens da lista
+   */
+  static buscarPorLista(lista_id) {
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT il.id, il.lista_id, il.produto_id, il.quantidade, il.preco_unitario, 
+               il.comprado, il.observacao, il.data_criacao, il.data_atualizacao,
+               p.nome as produto_nome, p.imagem_url,
+               c.nome as categoria_nome, c.icone as categoria_icone
+        FROM itens_lista il
+        JOIN produtos p ON il.produto_id = p.id
+        LEFT JOIN categorias c ON p.categoria_id = c.id
+        WHERE il.lista_id = ?
+        ORDER BY il.comprado, c.nome, p.nome
+      `;
+      
+      db.all(query, [lista_id], (err, rows) => {
+        if (err) return reject(err);
+        resolve(rows || []);
+      });
+    });
+  }
+
+  /**
+   * Atualiza um item da lista
+   * @param {number} id - ID do item
+   * @param {Object} dados - Novos dados do item
+   * @param {number} lista_id - ID da lista (para segurança)
+   * @returns {Promise<boolean>} - Sucesso da operação
+   */
+  static atualizar(id, dados, lista_id) {
+    return new Promise((resolve, reject) => {
+      const campos = [];
+      const valores = [];
+      
+      for (const [chave, valor] of Object.entries(dados)) {
+        if (chave !== 'id' && chave !== 'lista_id' && chave !== 'produto_id' && chave !== 'data_criacao') {
+          campos.push(`${chave} = ?`);
+          valores.push(valor);
+        }
+      }
+      
+      campos.push('data_atualizacao = CURRENT_TIMESTAMP');
+      
+      const query = `
+        UPDATE itens_lista
+        SET ${campos.join(', ')}
+        WHERE id = ? AND lista_id = ?
+      `;
+      
+      valores.push(id, lista_id);
+      
+      db.run(query, valores, function(err) {
+        if (err) return reject(err);
+        resolve(this.changes > 0);
+      });
+    });
+  }
+
+  /**
+   * Marca/desmarca um item como comprado
+   * @param {number} id - ID do item
+   * @param {boolean} comprado - Status de comprado
+   * @param {number} lista_id - ID da lista (para segurança)
+   * @returns {Promise<boolean>} - Sucesso da operação
+   */
+  static marcarComprado(id, comprado, lista_id) {
+    return new Promise((resolve, reject) => {
+      const query = `
+        UPDATE itens_lista
+        SET comprado = ?, data_atualizacao = CURRENT_TIMESTAMP
+        WHERE id = ? AND lista_id = ?
+      `;
+      
+      db.run(query, [comprado ? 1 : 0, id, lista_id], function(err) {
+        if (err) return reject(err);
+        resolve(this.changes > 0);
+      });
+    });
+  }
+
+  /**
+   * Remove um item da lista
+   * @param {number} id - ID do item
+   * @param {number} lista_id - ID da lista (para segurança)
+   * @returns {Promise<boolean>} - Sucesso da operação
+   */
+  static remover(id, lista_id) {
+    return new Promise((resolve, reject) => {
+      const query = `
+        DELETE FROM itens_lista
+        WHERE id = ? AND lista_id = ?
+      `;
+      
+      db.run(query, [id, lista_id], function(err) {
+        if (err) return reject(err);
+        resolve(this.changes > 0);
+      });
+    });
+  }
+
+  /**
+   * Obtém estatísticas de uma lista
+   * @param {number} lista_id - ID da lista
+   * @returns {Promise<Object>} - Estatísticas da lista
+   */
+  static obterEstatisticas(lista_id) {
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT 
+          COUNT(*) as total_itens,
+          SUM(CASE WHEN comprado = 1 THEN 1 ELSE 0 END) as itens_comprados,
+          SUM(quantidade * IFNULL(preco_unitario, 0)) as valor_total,
+          SUM(CASE WHEN comprado = 1 THEN quantidade * IFNULL(preco_unitario, 0) ELSE 0 END) as valor_comprado
+        FROM itens_lista
+        WHERE lista_id = ?
+      `;
+      
+      db.get(query, [lista_id], (err, row) => {
+        if (err) return reject(err);
+        resolve(row || {
+          total_itens: 0,
+          itens_comprados: 0,
+          valor_total: 0,
+          valor_comprado: 0
+        });
+      });
+    });
+  }
+}
+
+module.exports = {
+  Database,
+  UsuarioModel,
+  ListaModel,
+  ProdutoModel,
+  CategoriaModel,
+  ItemListaModel
+};
