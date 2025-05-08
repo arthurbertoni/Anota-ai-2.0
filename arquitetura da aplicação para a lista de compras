@@ -1,0 +1,170 @@
+/**
+ * Arquitetura da Aplicação - Lista de Compras
+ * 
+ * A aplicação será estruturada seguindo o padrão MVC (Model-View-Controller)
+ * utilizando Node.js com Express para o backend e HTML/CSS/JavaScript para o frontend.
+ */
+
+// Estrutura de Diretórios
+/**
+ * /
+ * ├── src/
+ * │   ├── config/                  # Configurações da aplicação
+ * │   │   ├── database.js          # Configuração do banco de dados
+ * │   │   └── auth.js              # Configuração de autenticação
+ * │   │
+ * │   ├── controllers/             # Controladores da aplicação
+ * │   │   ├── usuarioController.js # Controlador de usuários
+ * │   │   ├── listaController.js   # Controlador de listas de compras
+ * │   │   ├── produtoController.js # Controlador de produtos
+ * │   │   └── itemController.js    # Controlador de itens da lista
+ * │   │
+ * │   ├── models/                  # Modelos de dados
+ * │   │   ├── database.js          # Classe principal do banco de dados
+ * │   │   ├── usuarioModel.js      # Modelo de usuários
+ * │   │   ├── listaModel.js        # Modelo de listas de compras
+ * │   │   ├── produtoModel.js      # Modelo de produtos
+ * │   │   ├── categoriaModel.js    # Modelo de categorias
+ * │   │   └── itemListaModel.js    # Modelo de itens da lista
+ * │   │
+ * │   ├── routes/                  # Rotas da API
+ * │   │   ├── usuarioRoutes.js     # Rotas de usuários
+ * │   │   ├── listaRoutes.js       # Rotas de listas de compras
+ * │   │   ├── produtoRoutes.js     # Rotas de produtos
+ * │   │   └── itemRoutes.js        # Rotas de itens da lista
+ * │   │
+ * │   ├── middleware/              # Middlewares da aplicação
+ * │   │   ├── auth.js              # Middleware de autenticação
+ * │   │   └── validacao.js         # Middleware de validação de dados
+ * │   │
+ * │   ├── utils/                   # Funções utilitárias
+ * │   │   ├── logger.js            # Utilitário de log
+ * │   │   └── formatter.js         # Formatação de dados
+ * │   │
+ * │   ├── database/                # Arquivos relacionados ao banco de dados
+ * │   │   ├── schema.sql           # Esquema do banco de dados
+ * │   │   └── migrations/          # Migrações do banco de dados
+ * │   │
+ * │   ├── public/                  # Arquivos estáticos
+ * │   │   ├── css/                 # Estilos CSS
+ * │   │   ├── js/                  # Scripts JavaScript
+ * │   │   └── img/                 # Imagens
+ * │   │
+ * │   └── views/                   # Templates do frontend
+ * │       ├── partials/            # Componentes reutilizáveis
+ * │       ├── layouts/             # Layouts base
+ * │       └── pages/               # Páginas da aplicação
+ * │
+ * ├── server.js                    # Arquivo principal da aplicação
+ * ├── package.json                 # Dependências e scripts
+ * └── README.md                    # Documentação
+ */
+
+// server.js - Arquivo principal da aplicação
+const express = require('express');
+const path = require('path');
+const session = require('express-session');
+const SQLiteStore = require('connect-sqlite3')(session);
+const { Database } = require('./src/models/database');
+
+// Importar rotas
+const usuarioRoutes = require('./src/routes/usuarioRoutes');
+const listaRoutes = require('./src/routes/listaRoutes');
+const produtoRoutes = require('./src/routes/produtoRoutes');
+const itemRoutes = require('./src/routes/itemRoutes');
+
+// Inicializar aplicação
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Configuração do middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'src/public')));
+
+// Configuração da sessão
+app.use(session({
+  store: new SQLiteStore({
+    db: 'sessoes.db',
+    dir: './src/database'
+  }),
+  secret: 'sua_chave_secreta_aqui',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
+    secure: process.env.NODE_ENV === 'production'
+  }
+}));
+
+// Configuração da engine de visualização
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'src/views'));
+
+// Rotas da API
+app.use('/api/usuarios', usuarioRoutes);
+app.use('/api/listas', listaRoutes);
+app.use('/api/produtos', produtoRoutes);
+app.use('/api/itens', itemRoutes);
+
+// Rota principal
+app.get('/', (req, res) => {
+  if (req.session.usuario) {
+    res.redirect('/listas');
+  } else {
+    res.render('pages/login');
+  }
+});
+
+// Rotas de páginas
+app.get('/login', (req, res) => {
+  res.render('pages/login');
+});
+
+app.get('/registro', (req, res) => {
+  res.render('pages/registro');
+});
+
+app.get('/listas', (req, res) => {
+  if (!req.session.usuario) {
+    return res.redirect('/login');
+  }
+  res.render('pages/listas');
+});
+
+app.get('/listas/:id', (req, res) => {
+  if (!req.session.usuario) {
+    return res.redirect('/login');
+  }
+  res.render('pages/detalhes-lista', { listaId: req.params.id });
+});
+
+// Tratamento de erros
+app.use((req, res) => {
+  res.status(404).render('pages/404');
+});
+
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).render('pages/500', { error: err });
+});
+
+// Inicializar banco de dados e iniciar servidor
+(async () => {
+  try {
+    await Database.inicializar();
+    app.listen(PORT, () => {
+      console.log(`Servidor rodando na porta ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Erro ao inicializar o banco de dados:', error);
+    process.exit(1);
+  }
+})();
+
+// Tratamento de encerramento gracioso
+process.on('SIGINT', async () => {
+  console.log('Encerrando aplicação...');
+  await Database.fechar();
+  process.exit(0);
+});
