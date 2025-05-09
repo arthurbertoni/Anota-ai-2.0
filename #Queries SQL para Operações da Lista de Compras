@@ -1,0 +1,274 @@
+# Queries SQL para Operações da Lista de Compras
+
+## Consultas para Usuários
+
+### Criar um novo usuário
+```sql
+INSERT INTO usuarios (nome, email, senha) 
+VALUES (?, ?, ?);
+```
+
+### Verificar login
+```sql
+SELECT id, nome, email FROM usuarios 
+WHERE email = ? AND senha = ?;
+```
+
+### Atualizar último acesso
+```sql
+UPDATE usuarios 
+SET ultimo_acesso = CURRENT_TIMESTAMP 
+WHERE id = ?;
+```
+
+### Atualizar dados do usuário
+```sql
+UPDATE usuarios 
+SET nome = ?, email = ? 
+WHERE id = ?;
+```
+
+### Alterar senha
+```sql
+UPDATE usuarios 
+SET senha = ? 
+WHERE id = ? AND senha = ?;
+```
+
+## Consultas para Listas
+
+### Criar nova lista
+```sql
+INSERT INTO listas (usuario_id, nome) 
+VALUES (?, ?);
+```
+
+### Obter todas as listas de um usuário
+```sql
+SELECT l.*, 
+       COUNT(DISTINCT il.id) AS total_itens, 
+       SUM(CASE WHEN il.comprado = 1 THEN 1 ELSE 0 END) AS itens_comprados
+FROM listas l
+LEFT JOIN itens_lista il ON l.id = il.lista_id
+WHERE l.usuario_id = ?
+GROUP BY l.id
+ORDER BY l.ultima_modificacao DESC;
+```
+
+### Obter listas compartilhadas com o usuário
+```sql
+SELECT l.*, u.nome AS dono_lista, 
+       c.permissao,
+       COUNT(DISTINCT il.id) AS total_itens, 
+       SUM(CASE WHEN il.comprado = 1 THEN 1 ELSE 0 END) AS itens_comprados
+FROM compartilhamentos c
+JOIN listas l ON c.lista_id = l.id
+JOIN usuarios u ON l.usuario_id = u.id
+LEFT JOIN itens_lista il ON l.id = il.lista_id
+WHERE c.usuario_id = ?
+GROUP BY l.id
+ORDER BY l.ultima_modificacao DESC;
+```
+
+### Atualizar lista
+```sql
+UPDATE listas 
+SET nome = ?, ultima_modificacao = CURRENT_TIMESTAMP 
+WHERE id = ?;
+```
+
+### Marcar lista como concluída
+```sql
+UPDATE listas 
+SET concluida = ?, ultima_modificacao = CURRENT_TIMESTAMP 
+WHERE id = ?;
+```
+
+### Excluir lista
+```sql
+DELETE FROM listas 
+WHERE id = ? AND usuario_id = ?;
+```
+
+## Consultas para Itens
+
+### Adicionar item à lista
+```sql
+INSERT INTO itens_lista (lista_id, produto_id, nome_personalizado, quantidade, unidade, preco_estimado, observacao) 
+VALUES (?, ?, ?, ?, ?, ?, ?);
+```
+
+### Obter todos os itens de uma lista
+```sql
+SELECT il.*, p.nome AS nome_produto, p.imagem, c.nome AS categoria, c.icone, c.cor
+FROM itens_lista il
+LEFT JOIN produtos p ON il.produto_id = p.id
+LEFT JOIN categorias c ON p.categoria_id = c.id
+WHERE il.lista_id = ?
+ORDER BY il.comprado ASC, 
+         CASE WHEN p.categoria_id IS NULL THEN 999 ELSE p.categoria_id END, 
+         COALESCE(p.nome, il.nome_personalizado);
+```
+
+### Marcar item como comprado
+```sql
+UPDATE itens_lista 
+SET comprado = ?, preco_real = ?, data_compra = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END 
+WHERE id = ?;
+```
+
+### Atualizar item da lista
+```sql
+UPDATE itens_lista 
+SET quantidade = ?, unidade = ?, preco_estimado = ?, observacao = ? 
+WHERE id = ?;
+```
+
+### Remover item da lista
+```sql
+DELETE FROM itens_lista 
+WHERE id = ?;
+```
+
+### Contar itens por categoria em uma lista
+```sql
+SELECT c.nome, c.icone, c.cor, COUNT(il.id) AS total_itens, 
+       SUM(CASE WHEN il.comprado = 1 THEN 1 ELSE 0 END) AS itens_comprados
+FROM itens_lista il
+LEFT JOIN produtos p ON il.produto_id = p.id
+LEFT JOIN categorias c ON p.categoria_id = c.id
+WHERE il.lista_id = ?
+GROUP BY c.id
+ORDER BY total_itens DESC;
+```
+
+## Consultas para Produtos
+
+### Adicionar novo produto ao catálogo
+```sql
+INSERT INTO produtos (nome, categoria_id, imagem) 
+VALUES (?, ?, ?);
+```
+
+### Buscar produtos por nome ou categoria
+```sql
+SELECT p.*, c.nome AS categoria, c.icone, c.cor
+FROM produtos p
+LEFT JOIN categorias c ON p.categoria_id = c.id
+WHERE p.nome LIKE CONCAT('%', ?, '%') 
+OR c.nome LIKE CONCAT('%', ?, '%')
+ORDER BY p.nome;
+```
+
+### Obter produtos mais usados pelo usuário
+```sql
+SELECT p.*, COUNT(il.id) AS frequencia
+FROM produtos p
+JOIN itens_lista il ON p.id = il.produto_id
+JOIN listas l ON il.lista_id = l.id
+WHERE l.usuario_id = ?
+GROUP BY p.id
+ORDER BY frequencia DESC
+LIMIT 20;
+```
+
+## Consultas para Mercados
+
+### Adicionar um novo mercado
+```sql
+INSERT INTO mercados (nome, endereco, usuario_id) 
+VALUES (?, ?, ?);
+```
+
+### Listar mercados do usuário
+```sql
+SELECT * FROM mercados 
+WHERE usuario_id = ? OR usuario_id IS NULL
+ORDER BY nome;
+```
+
+## Consultas para Histórico de Preços
+
+### Registrar preço de produto
+```sql
+INSERT INTO historico_precos (produto_id, mercado_id, preco) 
+VALUES (?, ?, ?);
+```
+
+### Obter histórico de preços de um produto
+```sql
+SELECT hp.*, m.nome AS mercado
+FROM historico_precos hp
+LEFT JOIN mercados m ON hp.mercado_id = m.id
+WHERE hp.produto_id = ?
+ORDER BY hp.data_registro DESC;
+```
+
+### Obter preço médio de um produto
+```sql
+SELECT AVG(preco) AS preco_medio 
+FROM historico_precos
+WHERE produto_id = ?
+AND data_registro >= DATE_SUB(CURRENT_DATE, INTERVAL 60 DAY);
+```
+
+## Consultas para Compartilhamento
+
+### Compartilhar lista com outro usuário
+```sql
+INSERT INTO compartilhamentos (lista_id, usuario_id, permissao) 
+VALUES (?, ?, ?);
+```
+
+### Atualizar permissão de compartilhamento
+```sql
+UPDATE compartilhamentos 
+SET permissao = ? 
+WHERE lista_id = ? AND usuario_id = ?;
+```
+
+### Remover compartilhamento
+```sql
+DELETE FROM compartilhamentos 
+WHERE lista_id = ? AND usuario_id = ?;
+```
+
+### Listar usuários com quem uma lista está compartilhada
+```sql
+SELECT u.id, u.nome, u.email, c.permissao
+FROM compartilhamentos c
+JOIN usuarios u ON c.usuario_id = u.id
+WHERE c.lista_id = ?;
+```
+
+## Consultas Avançadas
+
+### Total gasto por lista
+```sql
+SELECT SUM(preco_real) AS total_gasto
+FROM itens_lista
+WHERE lista_id = ? AND comprado = 1;
+```
+
+### Diferença entre valor estimado e real
+```sql
+SELECT 
+  SUM(preco_estimado) AS total_estimado,
+  SUM(preco_real) AS total_real,
+  SUM(preco_real - preco_estimado) AS diferenca
+FROM itens_lista
+WHERE lista_id = ? AND comprado = 1;
+```
+
+### Histórico de compras com agrupamento mensal
+```sql
+SELECT 
+  DATE_FORMAT(il.data_compra, '%Y-%m') AS mes,
+  SUM(il.preco_real) AS total_gasto,
+  COUNT(DISTINCT l.id) AS total_listas
+FROM itens_lista il
+JOIN listas l ON il.lista_id = l.id
+WHERE l.usuario_id = ? AND il.comprado = 1
+GROUP BY mes
+ORDER BY mes DESC;
+```
