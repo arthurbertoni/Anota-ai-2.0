@@ -1,0 +1,512 @@
+# Arquitetura JavaScript para Lista de Compras
+
+## Estrutura de Pastas
+```
+/anotai
+  /backend
+    /config
+      - db.js           # Configuração de conexão com o banco de dados
+      - auth.js         # Configuração de autenticação
+    /controllers
+      - usuarioController.js
+      - listaController.js
+      - itemController.js
+      - produtoController.js
+      - categoriaController.js
+      - mercadoController.js
+      - compartilhamentoController.js
+    /models
+      - usuarioModel.js
+      - listaModel.js
+      - itemModel.js
+      - produtoModel.js
+      - categoriaModel.js
+      - mercadoModel.js
+      - historicoPrecoModel.js
+      - compartilhamentoModel.js
+    /routes
+      - usuarioRoutes.js
+      - listaRoutes.js
+      - itemRoutes.js
+      - produtoRoutes.js
+      - categoriaRoutes.js
+      - mercadoRoutes.js
+      - compartilhamentoRoutes.js
+    /middlewares
+      - authMiddleware.js
+      - validationMiddleware.js
+      - errorMiddleware.js
+    /utils
+      - helpers.js
+      - validators.js
+    - server.js       # Arquivo principal do servidor
+    - app.js          # Configuração do Express
+  
+  /frontend
+    /public
+      /images
+      /icons
+      - index.html
+    /src
+      /components
+        /auth
+          - Login.js
+          - Register.js
+          - RecoverPassword.js
+        /listas
+          - ListaCard.js
+          - ListaForm.js
+          - ListaDetalhes.js
+          - CompartilharLista.js
+        /itens
+          - ItemCard.js
+          - ItemForm.js
+          - ItemLista.js
+        /produtos
+          - ProdutoCard.js
+          - ProdutoForm.js
+          - ProdutoBusca.js
+        /categorias
+          - CategoriaCard.js
+          - CategoriaSelector.js
+        /mercados
+          - MercadoCard.js
+          - MercadoForm.js
+        /shared
+          - Header.js
+          - Footer.js
+          - Loader.js
+          - Toast.js
+          - ConfirmDialog.js
+      /contexts
+        - AuthContext.js
+        - ListaContext.js
+        - ThemeContext.js
+      /pages
+        - Home.js
+        - Perfil.js
+        - Listas.js
+        - ListaDetalhe.js
+        - Produtos.js
+        - Estatisticas.js
+        - NotFound.js
+      /services
+        - api.js
+        - auth.js
+        - storage.js
+      /utils
+        - formatters.js
+        - validators.js
+        - constants.js
+      /styles
+        - global.js
+        - themes.js
+      - App.js
+      - index.js
+      - routes.js
+  
+  - package.json
+  - README.md
+  - .env.example
+  - .gitignore
+```
+
+## Implementação Backend
+
+### Configuração do Banco de Dados (db.js)
+```javascript
+const mysql = require('mysql2/promise');
+require('dotenv').config();
+
+// Criar pool de conexões
+const pool = mysql.createPool({
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'anotai_compras',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
+
+// Função para executar queries
+async function query(sql, params) {
+  try {
+    const [results] = await pool.execute(sql, params);
+    return results;
+  } catch (error) {
+    console.error('Erro na execução da query:', error);
+    throw error;
+  }
+}
+
+module.exports = {
+  query,
+  pool
+};
+```
+
+### Autenticação (auth.js)
+```javascript
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+require('dotenv').config();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'anotai-secreto';
+const JWT_EXPIRY = process.env.JWT_EXPIRY || '7d';
+
+// Gerar hash de senha
+const hashPassword = async (password) => {
+  const salt = await bcrypt.genSalt(10);
+  return bcrypt.hash(password, salt);
+};
+
+// Verificar senha
+const comparePassword = async (password, hashedPassword) => {
+  return bcrypt.compare(password, hashedPassword);
+};
+
+// Gerar token JWT
+const generateToken = (userId) => {
+  return jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+};
+
+// Verificar token
+const verifyToken = (token) => {
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (error) {
+    return null;
+  }
+};
+
+module.exports = {
+  hashPassword,
+  comparePassword,
+  generateToken,
+  verifyToken
+};
+```
+
+### Modelo de Usuário (usuarioModel.js)
+```javascript
+const db = require('../config/db');
+const auth = require('../config/auth');
+
+class UsuarioModel {
+  // Cadastrar novo usuário
+  static async criar(nome, email, senha) {
+    const senhaHash = await auth.hashPassword(senha);
+    
+    const sql = `INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)`;
+    const result = await db.query(sql, [nome, email, senhaHash]);
+    
+    return result.insertId;
+  }
+
+  // Buscar usuário por email
+  static async buscarPorEmail(email) {
+    const sql = `SELECT * FROM usuarios WHERE email = ?`;
+    const usuarios = await db.query(sql, [email]);
+    
+    return usuarios.length > 0 ? usuarios[0] : null;
+  }
+
+  // Buscar usuário por ID
+  static async buscarPorId(id) {
+    const sql = `SELECT id, nome, email, data_cadastro, ultimo_acesso FROM usuarios WHERE id = ?`;
+    const usuarios = await db.query(sql, [id]);
+    
+    return usuarios.length > 0 ? usuarios[0] : null;
+  }
+
+  // Atualizar dados do usuário
+  static async atualizar(id, nome, email) {
+    const sql = `UPDATE usuarios SET nome = ?, email = ? WHERE id = ?`;
+    await db.query(sql, [nome, email, id]);
+    
+    return this.buscarPorId(id);
+  }
+
+  // Atualizar senha
+  static async atualizarSenha(id, senhaAtual, novaSenha) {
+    // Primeiro verifica se a senha atual está correta
+    const usuario = await db.query(`SELECT senha FROM usuarios WHERE id = ?`, [id]);
+    
+    if (usuario.length === 0) {
+      throw new Error('Usuário não encontrado');
+    }
+    
+    const senhaCorreta = await auth.comparePassword(senhaAtual, usuario[0].senha);
+    
+    if (!senhaCorreta) {
+      throw new Error('Senha atual incorreta');
+    }
+    
+    const senhaHash = await auth.hashPassword(novaSenha);
+    await db.query(`UPDATE usuarios SET senha = ? WHERE id = ?`, [senhaHash, id]);
+    
+    return true;
+  }
+
+  // Atualizar último acesso
+  static async atualizarUltimoAcesso(id) {
+    const sql = `UPDATE usuarios SET ultimo_acesso = CURRENT_TIMESTAMP WHERE id = ?`;
+    await db.query(sql, [id]);
+  }
+}
+
+module.exports = UsuarioModel;
+```
+
+### Controlador de Usuário (usuarioController.js)
+```javascript
+const UsuarioModel = require('../models/usuarioModel');
+const auth = require('../config/auth');
+
+class UsuarioController {
+  // Registrar novo usuário
+  static async registrar(req, res) {
+    try {
+      const { nome, email, senha } = req.body;
+      
+      // Verifica se o email já está em uso
+      const usuarioExistente = await UsuarioModel.buscarPorEmail(email);
+      if (usuarioExistente) {
+        return res.status(400).json({ erro: 'Este email já está cadastrado' });
+      }
+      
+      // Cria o usuário
+      const userId = await UsuarioModel.criar(nome, email, senha);
+      
+      // Gera o token
+      const token = auth.generateToken(userId);
+      
+      // Busca o usuário criado
+      const usuario = await UsuarioModel.buscarPorId(userId);
+      
+      res.status(201).json({
+        usuario,
+        token
+      });
+    } catch (error) {
+      console.error('Erro ao registrar usuário:', error);
+      res.status(500).json({ erro: 'Erro ao registrar usuário' });
+    }
+  }
+
+  // Login
+  static async login(req, res) {
+    try {
+      const { email, senha } = req.body;
+      
+      // Busca o usuário pelo email
+      const usuario = await UsuarioModel.buscarPorEmail(email);
+      
+      if (!usuario) {
+        return res.status(401).json({ erro: 'Credenciais inválidas' });
+      }
+      
+      // Verifica a senha
+      const senhaCorreta = await auth.comparePassword(senha, usuario.senha);
+      
+      if (!senhaCorreta) {
+        return res.status(401).json({ erro: 'Credenciais inválidas' });
+      }
+      
+      // Atualiza o último acesso
+      await UsuarioModel.atualizarUltimoAcesso(usuario.id);
+      
+      // Gera o token
+      const token = auth.generateToken(usuario.id);
+      
+      // Remove a senha do objeto de resposta
+      const { senha: _, ...usuarioSemSenha } = usuario;
+      
+      res.json({
+        usuario: usuarioSemSenha,
+        token
+      });
+    } catch (error) {
+      console.error('Erro ao fazer login:', error);
+      res.status(500).json({ erro: 'Erro ao fazer login' });
+    }
+  }
+
+  // Obter perfil
+  static async perfil(req, res) {
+    try {
+      const userId = req.usuario.id;
+      
+      const usuario = await UsuarioModel.buscarPorId(userId);
+      
+      if (!usuario) {
+        return res.status(404).json({ erro: 'Usuário não encontrado' });
+      }
+      
+      res.json(usuario);
+    } catch (error) {
+      console.error('Erro ao buscar perfil:', error);
+      res.status(500).json({ erro: 'Erro ao buscar perfil' });
+    }
+  }
+
+  // Atualizar perfil
+  static async atualizarPerfil(req, res) {
+    try {
+      const userId = req.usuario.id;
+      const { nome, email } = req.body;
+      
+      // Verifica se o email já está em uso por outro usuário
+      if (email) {
+        const usuarioExistente = await UsuarioModel.buscarPorEmail(email);
+        if (usuarioExistente && usuarioExistente.id !== userId) {
+          return res.status(400).json({ erro: 'Este email já está sendo usado por outro usuário' });
+        }
+      }
+      
+      const usuarioAtualizado = await UsuarioModel.atualizar(userId, nome, email);
+      
+      res.json(usuarioAtualizado);
+    } catch (error) {
+      console.error('Erro ao atualizar perfil:', error);
+      res.status(500).json({ erro: 'Erro ao atualizar perfil' });
+    }
+  }
+
+  // Alterar senha
+  static async alterarSenha(req, res) {
+    try {
+      const userId = req.usuario.id;
+      const { senhaAtual, novaSenha } = req.body;
+      
+      await UsuarioModel.atualizarSenha(userId, senhaAtual, novaSenha);
+      
+      res.json({ mensagem: 'Senha atualizada com sucesso' });
+    } catch (error) {
+      console.error('Erro ao alterar senha:', error);
+      
+      if (error.message === 'Senha atual incorreta') {
+        return res.status(400).json({ erro: error.message });
+      }
+      
+      res.status(500).json({ erro: 'Erro ao alterar senha' });
+    }
+  }
+}
+
+module.exports = UsuarioController;
+```
+
+### Middleware de Autenticação (authMiddleware.js)
+```javascript
+const auth = require('../config/auth');
+
+module.exports = (req, res, next) => {
+  try {
+    // Obtém o token do header Authorization
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader) {
+      return res.status(401).json({ erro: 'Token não fornecido' });
+    }
+    
+    // Verifica se o formato do token é válido
+    const parts = authHeader.split(' ');
+    
+    if (parts.length !== 2) {
+      return res.status(401).json({ erro: 'Erro no formato do token' });
+    }
+    
+    const [scheme, token] = parts;
+    
+    if (!/^Bearer$/i.test(scheme)) {
+      return res.status(401).json({ erro: 'Formato de token inválido' });
+    }
+    
+    // Verifica e decodifica o token
+    const decoded = auth.verifyToken(token);
+    
+    if (!decoded) {
+      return res.status(401).json({ erro: 'Token inválido ou expirado' });
+    }
+    
+    // Adiciona o id do usuário ao objeto de requisição
+    req.usuario = { id: decoded.id };
+    
+    return next();
+  } catch (error) {
+    console.error('Erro na autenticação:', error);
+    return res.status(500).json({ erro: 'Erro na autenticação' });
+  }
+};
+```
+
+### Modelo de Lista (listaModel.js)
+```javascript
+const db = require('../config/db');
+
+class ListaModel {
+  // Criar nova lista
+  static async criar(usuarioId, nome) {
+    const sql = `INSERT INTO listas (usuario_id, nome) VALUES (?, ?)`;
+    const result = await db.query(sql, [usuarioId, nome]);
+    
+    return result.insertId;
+  }
+
+  // Buscar lista por ID
+  static async buscarPorId(id) {
+    const sql = `SELECT * FROM listas WHERE id = ?`;
+    const listas = await db.query(sql, [id]);
+    
+    return listas.length > 0 ? listas[0] : null;
+  }
+
+  // Listar todas as listas de um usuário
+  static async listarPorUsuario(usuarioId) {
+    const sql = `
+      SELECT l.*, 
+             COUNT(DISTINCT il.id) AS total_itens, 
+             SUM(CASE WHEN il.comprado = 1 THEN 1 ELSE 0 END) AS itens_comprados
+      FROM listas l
+      LEFT JOIN itens_lista il ON l.id = il.lista_id
+      WHERE l.usuario_id = ?
+      GROUP BY l.id
+      ORDER BY l.ultima_modificacao DESC
+    `;
+    
+    return await db.query(sql, [usuarioId]);
+  }
+
+  // Listar listas compartilhadas com um usuário
+  static async listarCompartilhadas(usuarioId) {
+    const sql = `
+      SELECT l.*, u.nome AS dono_lista, 
+             c.permissao,
+             COUNT(DISTINCT il.id) AS total_itens, 
+             SUM(CASE WHEN il.comprado = 1 THEN 1 ELSE 0 END) AS itens_comprados
+      FROM compartilhamentos c
+      JOIN listas l ON c.lista_id = l.id
+      JOIN usuarios u ON l.usuario_id = u.id
+      LEFT JOIN itens_lista il ON l.id = il.lista_id
+      WHERE c.usuario_id = ?
+      GROUP BY l.id
+      ORDER BY l.ultima_modificacao DESC
+    `;
+    
+    return await db.query(sql, [usuarioId]);
+  }
+
+  // Atualizar lista
+  static async atualizar(id, nome) {
+    const sql = `UPDATE listas SET nome = ?, ultima_modificacao = CURRENT_TIMESTAMP WHERE id = ?`;
+    await db.query(sql, [nome, id]);
+    
+    return this.buscarPorId(id);
+  }
+
+  // Marcar lista como concluída
+  static async marcarComoConcluida(id, concluida) {
+    const sql = `UPDATE listas SET concluida = ?, ultima_modificacao = CURRENT_TIMESTAMP WHERE id = ?`;
+    await db.query(sql, [concluida
