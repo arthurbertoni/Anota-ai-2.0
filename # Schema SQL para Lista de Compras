@@ -1,0 +1,108 @@
+# Schema SQL para Lista de Compras
+
+```sql
+-- Criação do banco de dados
+CREATE DATABASE IF NOT EXISTS anotai_compras;
+USE anotai_compras;
+
+-- Tabela de usuários
+CREATE TABLE usuarios (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(100) NOT NULL,
+  email VARCHAR(100) NOT NULL UNIQUE,
+  senha VARCHAR(255) NOT NULL,
+  data_cadastro DATETIME DEFAULT CURRENT_TIMESTAMP,
+  ultimo_acesso DATETIME
+);
+
+-- Tabela de listas de compras
+CREATE TABLE listas (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id INT NOT NULL,
+  nome VARCHAR(100) NOT NULL,
+  data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
+  ultima_modificacao DATETIME DEFAULT CURRENT_TIMESTAMP,
+  concluida BOOLEAN DEFAULT FALSE,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+);
+
+-- Tabela de categorias de produtos
+CREATE TABLE categorias (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(50) NOT NULL,
+  icone VARCHAR(50),
+  cor VARCHAR(20)
+);
+
+-- Tabela de produtos (cadastro genérico)
+CREATE TABLE produtos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(100) NOT NULL,
+  categoria_id INT,
+  imagem VARCHAR(255),
+  FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE SET NULL
+);
+
+-- Tabela de itens da lista (itens específicos de cada lista)
+CREATE TABLE itens_lista (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  lista_id INT NOT NULL,
+  produto_id INT,
+  nome_personalizado VARCHAR(100),
+  quantidade DECIMAL(10,2) DEFAULT 1,
+  unidade VARCHAR(20) DEFAULT 'unidade',
+  preco_estimado DECIMAL(10,2),
+  preco_real DECIMAL(10,2),
+  comprado BOOLEAN DEFAULT FALSE,
+  observacao TEXT,
+  data_adicao DATETIME DEFAULT CURRENT_TIMESTAMP,
+  data_compra DATETIME,
+  FOREIGN KEY (lista_id) REFERENCES listas(id) ON DELETE CASCADE,
+  FOREIGN KEY (produto_id) REFERENCES produtos(id) ON DELETE SET NULL
+);
+
+-- Tabela de mercados/lojas
+CREATE TABLE mercados (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nome VARCHAR(100) NOT NULL,
+  endereco VARCHAR(255),
+  usuario_id INT,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+
+-- Tabela para histórico de preços
+CREATE TABLE historico_precos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  produto_id INT NOT NULL,
+  mercado_id INT,
+  preco DECIMAL(10,2) NOT NULL,
+  data_registro DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (produto_id) REFERENCES produtos(id) ON DELETE CASCADE,
+  FOREIGN KEY (mercado_id) REFERENCES mercados(id) ON DELETE SET NULL
+);
+
+-- Tabela para compartilhamento de listas
+CREATE TABLE compartilhamentos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  lista_id INT NOT NULL,
+  usuario_id INT NOT NULL,
+  permissao ENUM('leitura', 'edicao') DEFAULT 'leitura',
+  data_compartilhamento DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (lista_id) REFERENCES listas(id) ON DELETE CASCADE,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  UNIQUE KEY (lista_id, usuario_id)
+);
+
+-- Inserção de categorias padrão
+INSERT INTO categorias (nome, icone, cor) VALUES
+('Frutas', 'fruit', '#FF5733'),
+('Legumes', 'vegetable', '#33FF57'),
+('Carnes', 'meat', '#FF3333'),
+('Laticínios', 'milk', '#FFFFFF'),
+('Higiene', 'hygiene', '#33FFFF'),
+('Limpeza', 'cleaning', '#3357FF'),
+('Bebidas', 'drinks', '#FFFF33'),
+('Padaria', 'bread', '#D4AA00'),
+('Congelados', 'frozen', '#33AAFF'),
+('Outros', 'other', '#AAAAAA');
+```
